@@ -1,5 +1,7 @@
 How to Use the Script:
 
+- Download to your local machine and unblock in permissions.
+- Right click and run with powershell.
 - API Key Entry: Enter your Meraki Dashboard API key in the text box provided.
 - Select Operation: Choose whether to "Add Admin" or "Remove Admin" using the drop-down menu.
 
