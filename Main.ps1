@@ -1,6 +1,19 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Function to log custom messages to the console
+function Log-Message {
+    param (
+        [string]$message,
+        [string]$type = "INFO"
+    )
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "[$timestamp] [$type] $message"
+    
+    Write-Host $logMessage
+}
+
 # Create the Form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Meraki Dashboard Admin Manager"
@@ -94,7 +107,17 @@ function Get-Organizations {
         "Content-Type" = "application/json"
     }
     
-    $response = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
+    try {
+        $response = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
+        Log-Message "Fetched organizations successfully."
+    } catch {
+        if ($_.Exception.Response.StatusCode.Value__ -eq 401) {
+            Log-Message "Unauthorized access - check API key." "ERROR"
+        } else {
+            Log-Message "Error fetching organizations: $($_.Exception.Message)" "ERROR"
+        }
+        return $null
+    }
     
     return $response
 }
@@ -104,6 +127,7 @@ function Add-MerakiAdmin {
     param (
         [string]$apiKey,
         [string]$orgId,
+        [string]$orgName,
         [string]$email,
         [string]$name,
         [string]$orgAccess,
@@ -124,9 +148,17 @@ function Add-MerakiAdmin {
         "Content-Type" = "application/json"
     }
     
-    $response = Invoke-RestMethod -Method Post -Uri $url -Headers $headers -Body $body
-    
-    return $response
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri $url -Headers $headers -Body $body
+        Log-Message "Admin $email added to organization $orgName ($orgId)."
+    } catch {
+        if ($_.Exception.Response.StatusCode.Value__ -eq 401) {
+            Log-Message "Unauthorized access when adding admin to organization $orgName ($orgId). Skipping this organization." "ERROR"
+            return
+        } else {
+            Log-Message "Error adding admin to organization $orgName ($orgId): $($_.Exception.Message)" "ERROR"
+        }
+    }
 }
 
 # Function to remove an admin
@@ -134,6 +166,7 @@ function Remove-MerakiAdmin {
     param (
         [string]$apiKey,
         [string]$orgId,
+        [string]$orgName,
         [string]$adminId
     )
     
@@ -144,9 +177,17 @@ function Remove-MerakiAdmin {
         "Content-Type" = "application/json"
     }
     
-    $response = Invoke-RestMethod -Method Delete -Uri $url -Headers $headers
-    
-    return $response
+    try {
+        $response = Invoke-RestMethod -Method Delete -Uri $url -Headers $headers
+        Log-Message "Admin $adminId removed from organization $orgName ($orgId)."
+    } catch {
+        if ($_.Exception.Response.StatusCode.Value__ -eq 401) {
+            Log-Message "Unauthorized access when removing admin from organization $orgName ($orgId). Skipping this organization." "ERROR"
+            return
+        } else {
+            Log-Message "Error removing admin from organization $orgName ($orgId): $($_.Exception.Message)" "ERROR"
+        }
+    }
 }
 
 # Load admins to remove when selecting 'Remove Admin'
@@ -162,9 +203,19 @@ $comboBoxOperation.add_SelectedIndexChanged({
                 "X-Cisco-Meraki-API-Key" = $apiKey
                 "Content-Type" = "application/json"
             }
-            $admins = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
-            foreach ($admin in $admins) {
-                $comboBoxAdminRemove.Items.Add("$($admin.name) ($($admin.id))")
+            try {
+                $admins = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
+                Log-Message "Fetched admins for organization $($org.name) ($($org.id))."
+                foreach ($admin in $admins) {
+                    $comboBoxAdminRemove.Items.Add("$($admin.name) ($($admin.id))")
+                }
+            } catch {
+                if ($_.Exception.Response.StatusCode.Value__ -eq 401) {
+                    Log-Message "Unauthorized access when fetching admins for organization $($org.name) ($($org.id)). Skipping this organization." "ERROR"
+                    continue
+                } else {
+                    Log-Message "Error fetching admins for organization $($org.name) ($($org.id)): $($_.Exception.Message)" "ERROR"
+                }
             }
         }
     }
@@ -183,14 +234,14 @@ $buttonExecute.Add_Click({
     
     foreach ($org in $orgs) {
         if ($operation -eq "Add Admin") {
-            Add-MerakiAdmin -apiKey $apiKey -orgId $org.id -email $adminEmail -name $adminName -orgAccess $orgAccess -tagsAccess $tagsAccess
-            [System.Windows.Forms.MessageBox]::Show("Admin added to $($org.name)")
+            Add-MerakiAdmin -apiKey $apiKey -orgId $org.id -orgName $org.name -email $adminEmail -name $adminName -orgAccess $orgAccess -tagsAccess $tagsAccess
+            Log-Message "Attempted to add admin $adminEmail to organization $($org.name)."
         }
         elseif ($operation -eq "Remove Admin") {
             $selectedAdmin = $comboBoxAdminRemove.SelectedItem
             $adminId = $selectedAdmin -replace '^.*\((.*?)\)$','$1'
-            Remove-MerakiAdmin -apiKey $apiKey -orgId $org.id -adminId $adminId
-            [System.Windows.Forms.MessageBox]::Show("Admin removed from $($org.name)")
+            Remove-MerakiAdmin -apiKey $apiKey -orgId $org.id -orgName $org.name -adminId $adminId
+            Log-Message "Attempted to remove admin $adminId from organization $($org.name)."
         }
     }
 })
