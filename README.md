@@ -16,14 +16,15 @@ Logging Function (Log-Message): The Log-Message function uses Write-Host to outp
 
 Logging Actions: The script logs the following actions:
 
-Successful fetching of organizations and admins.
-Attempt to add or remove an admin.
-Logging on 401 Unauthorized, When a 401 Unauthorized error occurs, the script logs the error along with the organization name and skips further processing for that organization.
-Continues Loop:
-- The script uses the continue statement to skip the current iteration when a 401 Unauthorized error is encountered during the admin listing or action.
-- This ensures that the script continues to process other organizations even if one or more organizations result in a 401 Unauthorized error.
+- Successful fetching of organizations and admins.
+- Attempt to add or remove an admin.
+- Logging on 401 Unauthorized:
+  - When a 401 Unauthorized error occurs, the script logs the error along with the organization name and skips further processing for that organization and Continues Loop:
+  - The script uses the continue statement to skip the current iteration when a 401 Unauthorized error is encountered during the admin listing or action.
+  - This ensures that the script continues to process other organizations even if one or more organizations result in a 401 Unauthorized error.
 
-Running the Script: When you run the script, you will see the log messages directly in the PowerShell console, making it easy to monitor what the script is doing and to identify any issues.
+Running the Script: 
+When you run the script, you will see the log messages directly in the PowerShell console, making it easy to monitor what the script is doing and to identify any issues.
 
 Additional Notes:
 The script automatically loops through all organizations associated with your API key.
