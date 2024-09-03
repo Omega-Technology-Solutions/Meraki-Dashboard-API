@@ -17,7 +17,7 @@ function Log-Message {
 # Create the Form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Meraki Dashboard Admin Manager"
-$form.Size = New-Object System.Drawing.Size(400,350)
+$form.Size = New-Object System.Drawing.Size(400,400)
 $form.StartPosition = "CenterScreen"
 
 # Create Label and TextBox for API Key
@@ -40,7 +40,7 @@ $labelOperation.Text = "Operation:"
 $comboBoxOperation = New-Object System.Windows.Forms.ComboBox
 $comboBoxOperation.Location = New-Object System.Drawing.Point(120,60)
 $comboBoxOperation.Size = New-Object System.Drawing.Size(250,20)
-$comboBoxOperation.Items.AddRange(@("Add Admin","Remove Admin"))																
+$comboBoxOperation.Items.AddRange(@("Add Admin","Remove Admin"))
 $comboBoxOperation.Enabled = $false
 
 # Create Label and TextBox for Admin Email (for adding)
@@ -74,23 +74,35 @@ $labelAdminAccess.Text = "Admin Access:"
 $comboBoxAdminAccess = New-Object System.Windows.Forms.ComboBox
 $comboBoxAdminAccess.Location = New-Object System.Drawing.Point(120,180)
 $comboBoxAdminAccess.Size = New-Object System.Drawing.Size(250,20)
-$comboBoxAdminAccess.Items.AddRange(@("Full Access","Read-Only"))																 
+$comboBoxAdminAccess.Items.AddRange(@("Full Access","Read-Only"))
 $comboBoxAdminAccess.Enabled = $false
+
+# Create ComboBox for selecting Organization to Add Admin
+$labelOrganization = New-Object System.Windows.Forms.Label
+$labelOrganization.Location = New-Object System.Drawing.Point(10,220)
+$labelOrganization.Size = New-Object System.Drawing.Size(100,20)
+$labelOrganization.Text = "Organization:"
+
+$comboBoxOrganization = New-Object System.Windows.Forms.ComboBox
+$comboBoxOrganization.Location = New-Object System.Drawing.Point(120,220)
+$comboBoxOrganization.Size = New-Object System.Drawing.Size(250,20)
+$comboBoxOrganization.Items.Add("All Organizations")
+$comboBoxOrganization.Enabled = $false
 
 # Create ComboBox for selecting Admin to Remove
 $labelAdminRemove = New-Object System.Windows.Forms.Label
-$labelAdminRemove.Location = New-Object System.Drawing.Point(10,220)
+$labelAdminRemove.Location = New-Object System.Drawing.Point(10,260)
 $labelAdminRemove.Size = New-Object System.Drawing.Size(100,20)
 $labelAdminRemove.Text = "Remove Admin:"
 
 $comboBoxAdminRemove = New-Object System.Windows.Forms.ComboBox
-$comboBoxAdminRemove.Location = New-Object System.Drawing.Point(120,220)
+$comboBoxAdminRemove.Location = New-Object System.Drawing.Point(120,260)
 $comboBoxAdminRemove.Size = New-Object System.Drawing.Size(250,20)
 $comboBoxAdminRemove.Enabled = $false
 
 # Create Button for executing the operation
 $buttonExecute = New-Object System.Windows.Forms.Button
-$buttonExecute.Location = New-Object System.Drawing.Point(120,260)
+$buttonExecute.Location = New-Object System.Drawing.Point(120,300)
 $buttonExecute.Size = New-Object System.Drawing.Size(250,30)
 $buttonExecute.Text = "Execute"
 $buttonExecute.Enabled = $false
@@ -106,6 +118,8 @@ $form.Controls.Add($labelAdminName)
 $form.Controls.Add($textBoxAdminName)
 $form.Controls.Add($labelAdminAccess)
 $form.Controls.Add($comboBoxAdminAccess)
+$form.Controls.Add($labelOrganization)
+$form.Controls.Add($comboBoxOrganization)
 $form.Controls.Add($labelAdminRemove)
 $form.Controls.Add($comboBoxAdminRemove)
 $form.Controls.Add($buttonExecute)
@@ -227,12 +241,23 @@ function Remove-MerakiAdmin {
 $textBoxApiKey.add_TextChanged({
     if ($textBoxApiKey.Text.Length -gt 0) {
         $comboBoxOperation.Enabled = $true
+        $comboBoxOrganization.Enabled = $true
+        $comboBoxOrganization.Items.Clear()
+        $comboBoxOrganization.Items.Add("All Organizations")
+
+        $apiKey = $textBoxApiKey.Text
+        $orgs = Get-Organizations -apiKey $apiKey
+
+        foreach ($org in $orgs) {
+            $comboBoxOrganization.Items.Add($org.name)
+        }
     } else {
         $comboBoxOperation.Enabled = $false
         $textBoxAdminEmail.Enabled = $false
         $textBoxAdminName.Enabled = $false
         $comboBoxAdminAccess.Enabled = $false
         $comboBoxAdminRemove.Enabled = $false
+        $comboBoxOrganization.Enabled = $false
         $buttonExecute.Enabled = $false
     }
 })
@@ -244,13 +269,14 @@ $comboBoxOperation.add_SelectedIndexChanged({
         $textBoxAdminName.Enabled = $false
         $comboBoxAdminAccess.Enabled = $false
         $comboBoxAdminRemove.Enabled = $true
+        $comboBoxOrganization.Enabled = $false
         $buttonExecute.Enabled = $true
 
         $apiKey = $textBoxApiKey.Text
         $orgs = Get-Organizations -apiKey $apiKey
         $comboBoxAdminRemove.Items.Clear()
         $existingAdmins = @()
-		$existingEmails = @()
+        $existingEmails = @()
 
         foreach ($org in $orgs) {
             $url = "$baseUrl/organizations/$($org.id)/admins"
@@ -262,11 +288,10 @@ $comboBoxOperation.add_SelectedIndexChanged({
                 $admins = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
                 Log-Message "Fetched admins for organization $($org.name) ($($org.id))."
                 foreach ($admin in $admins) {
-																	
                     $adminEntry = "$($admin.name) - $($admin.email)"
                     if ($existingEmails -notcontains $admin.email) {
                         $existingAdmins += $adminEntry
-						$existingEmails += $admin.email
+                        $existingEmails += $admin.email
                     }
                 }
             } catch {
@@ -290,6 +315,7 @@ $comboBoxOperation.add_SelectedIndexChanged({
         $textBoxAdminEmail.Enabled = $true
         $textBoxAdminName.Enabled = $true
         $comboBoxAdminAccess.Enabled = $true
+        $comboBoxOrganization.Enabled = $true
         $comboBoxAdminRemove.Enabled = $false
         $buttonExecute.Enabled = $true
     }
@@ -304,23 +330,33 @@ $buttonExecute.Add_Click({
     $orgAccess = if ($comboBoxAdminAccess.SelectedItem -eq "Full Access") { "full" } else { "read-only" }
     $tagsAccess = @() # or customize based on your need
     
-    $orgs = Get-Organizations -apiKey $apiKey
-    
-    foreach ($org in $orgs) {
-        if ($operation -eq "Add Admin") {
-            Add-MerakiAdmin -apiKey $apiKey -orgId $org.id -orgName $org.name -email $adminEmail -name $adminName -orgAccess $orgAccess -tagsAccess $tagsAccess
-            Log-Message "Attempted to add admin $adminEmail to organization $($org.name) with $orgAccess access."
-        }
-        elseif ($operation -eq "Remove Admin") {
-            $selectedAdmin = $comboBoxAdminRemove.SelectedItem
-            if ($selectedAdmin) {
-                $adminDetails = $selectedAdmin -split ' - '
-                $adminNameToRemove = $adminDetails[0]
-                $adminEmailToRemove = $adminDetails[1]
-                Remove-MerakiAdmin -apiKey $apiKey -orgId $org.id -orgName $org.name -adminEmail $adminEmailToRemove
-            } else {
-                Log-Message "No admin selected for removal." "ERROR"
+    if ($operation -eq "Add Admin") {
+        $orgSelection = $comboBoxOrganization.SelectedItem
+        $orgs = Get-Organizations -apiKey $apiKey
+        
+        if ($orgSelection -eq "All Organizations") {
+            foreach ($org in $orgs) {
+                Add-MerakiAdmin -apiKey $apiKey -orgId $org.id -orgName $org.name -email $adminEmail -name $adminName -orgAccess $orgAccess -tagsAccess $tagsAccess
             }
+        } else {
+            $org = $orgs | Where-Object { $_.name -eq $orgSelection }
+            if ($org) {
+                Add-MerakiAdmin -apiKey $apiKey -orgId $org.id -orgName $org.name -email $adminEmail -name $adminName -orgAccess $orgAccess -tagsAccess $tagsAccess
+            }
+        }
+    }
+    elseif ($operation -eq "Remove Admin") {
+        $orgs = Get-Organizations -apiKey $apiKey
+        $selectedAdmin = $comboBoxAdminRemove.SelectedItem
+        if ($selectedAdmin) {
+            $adminDetails = $selectedAdmin -split ' - '
+            $adminEmailToRemove = $adminDetails[1]
+
+            foreach ($org in $orgs) {
+                Remove-MerakiAdmin -apiKey $apiKey -orgId $org.id -orgName $org.name -adminEmail $adminEmailToRemove
+            }
+        } else {
+            Log-Message "No admin selected for removal." "ERROR"
         }
     }
 })
